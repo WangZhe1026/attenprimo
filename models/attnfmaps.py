@@ -3,7 +3,7 @@ import sys
 import math
 import torch
 import torch.nn as nn
-
+from diffusion_net.layers import DiffusionNet
 ROOT_DIR = osp.join(osp.abspath(osp.dirname(__file__)), '../')
 if ROOT_DIR not in sys.path:
     sys.path.append(ROOT_DIR)
@@ -112,7 +112,9 @@ class SpectralAttentionNet(nn.Module):
             nn.Linear(nfeatures, len(spectral_dims)),
         )
 
+
     def forward(self, xyz0, xyz1, evecs0, evecs1, evals0, evals1, mass0, mass1, feats0, feats1, fmaps01):
+        # attn net
         B = xyz0.shape[0]
 
         evecs0_sub, evecs1_sub = list(), list()
@@ -157,31 +159,44 @@ class SpectralAttentionNet(nn.Module):
 
         attn = self.mlp2(ft)
 
-        return attn
+        # todo add forward primo
 
-    # 根据代码可以分析这个神经网络的输入和输出：
-    #
-    # 输入：
-    #
-    # xyz0, xyz1: 输入点云0和点云1的坐标
-    # evecs0, evecs1: 输入点云0和点云1的特征向量(每点一个特征向量)
-    # evals0, evals1: 输入点云0和点云1的特征值
-    # mass0, mass1: 输入点云0和点云1的质量(每点一个值)
-    # feats0, feats1: 输入点云0和点云1的原始特征(每点一个特征向量)
-    # fmaps01: 点云0和点云1之间学习得到的特征映射关系
-    # 输出：
-    #
-    # attn: 网络输出的注意力权重向量，表示点云0和点云1之间的匹配关系
-    # 过程：
-    #
-    # 对输入点云进行下采样(可选)
-    # 提取点云特征
-    # 通过特征空间变换学习点云间对应关系
-    # 应用注意力机制建模匹配关系
-    # 输出匹配关系的注意力权重
-    # 所以总体来说：
-    #
-    # 输入包括点云坐标、特征向量、特征值、质量和原始特征
-    # 输出是点云间匹配关系的注意力权重表示
-    # 网络学习点云特征和匹配关系建模点云间对应
-    # 它实现了一个端到端的点云谱匹配神经网络模型。
+        #def forward(self, xyz0, xyz1, evecs0, evecs1, evals0, evals1, mass0, mass1, feats0, feats1, fmaps01):
+        # original prism
+        # verts = batch.pos.reshape(-1, 3)
+        # faces = batch.faces.t()
+        # prism_base = verts[faces]  # (n_faces, 3, 3)
+        # bs, _, _ = batch.pos.shape
+
+        # # forward through diffusion net
+        # batch = self.diffusion_net(batch)  # (bs, n_verts, dim)
+
+        # features per face
+        # x = batch.features
+        # x_gather = x.unsqueeze(-1).expand(-1, -1, -1, 3)
+        # faces_gather = faces.unsqueeze(0).unsqueeze(2).expand(-1, -1, x.shape[-1], -1)
+        # xf = torch.gather(x_gather, 1, faces_gather)
+        # features = torch.mean(xf, dim=-1)  # (bs, n_faces, dim)
+
+        # # refine features with mlp
+        # features = self.mlp_refine(features)  # (bs, n_faces, 12)
+
+        # # get the translation and rotation
+        # rotations = features[:, :, :9].reshape(-1, 3, 3)
+        # rotations = roma.special_procrustes(rotations)  # (n_faces, 3, 3)
+        # translations = features[:, :, 9:].reshape(-1, 3)  # (n_faces, 3)
+
+        # # transform the prism
+        # transformed_prism = (prism_base @ rotations) + translations[:, None]
+
+        # # prism to vertices
+        # features = self.prism_to_vertices(transformed_prism, faces, verts)
+
+        # batch.features = features.reshape(bs, -1, 3)
+        # batch.transformed_prism = transformed_prism
+        # batch.rotations = rotations
+        # return batch
+
+        # todo add return batch
+        return attn 
+

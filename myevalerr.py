@@ -87,6 +87,7 @@ def run_exp(cfg, test_root, out_root):
         evecs1 = pair_dict['evecs1']
         num_verts0 = evecs0.shape[0]
         num_verts1 = evecs1.shape[0]
+        areas = 1.05
         #####################################################################################################
         # geodist0, sqrt_area0 = load_geodist(osp.join(shape_dir, '..', 'dist', '{}.mat'.format(id0)))
         # todo: create my load_geodist
@@ -104,7 +105,7 @@ def run_exp(cfg, test_root, out_root):
                                 axis=-1)  # match010_ref 是一个二维数组 第一行是第一个形状的预测点，第二行是第二个形状的真实点gt
         match010_ref = np.ravel_multi_index(match010_ref.T,
                                             dims=[num_verts0, num_verts0])  # todo: xxxxyyyy => xyxyxyxy
-        geoerrs_ref = np.take(dist, match010_ref)  # todo :这个geoerrs_ref是不是就是tttt\cougar_01.mat里存的dist
+        geoerrs_ref = np.take(dist, match010_ref) / np.sqrt(areas)  # todo :这个geoerrs_ref是不是就是tttt\cougar_01.mat里存的dist
         geoerrs_ref = np.squeeze(geoerrs_ref)
         all_geoerrs_ref.append(geoerrs_ref)
 

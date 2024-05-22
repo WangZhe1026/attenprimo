@@ -1,3 +1,4 @@
+
 from trimesh.graph import face_adjacency
 import torch
 import torch.nn as nn
@@ -8,9 +9,9 @@ class PrismRegularizationLoss(nn.Module):
     Calculate the loss based on the PriMo energy, as described in the paper:
     PriMo: Coupled Prisms for Intuitive Surface Modeling
     """
-    def __init__(self, primo_h):
+    def __init__(self):
         super().__init__()
-        self.h = primo_h
+        self.h = 0.02
 
         # compute coefficient for the energy
         indices = torch.tensor([(i, j) for i in range(2) for j in range(2)])
@@ -21,9 +22,8 @@ class PrismRegularizationLoss(nn.Module):
     def forward(self, transformed_prism, rotations, verts, faces, normals):
         # transformed_prism is (n_faces, 3, 3)
         # verts and faces are from the template (shape 2)
-        # * for now assumes there is only one batch
-        # todo add batch support
-        bs = verts.shape[0]
+        # bs = verts.shape[0]
+   
         verts = verts.reshape(-1, 3)
         normals = normals.reshape(-1, 3)
         faces = faces.t()
@@ -75,7 +75,7 @@ class PrismRegularizationLoss(nn.Module):
         # weight = torch.ones_like(weight).to(weight.device)  # todo remove
         energy = energy * weight  # (n_edges,)
 
-        loss = energy.sum() / bs  # todo when batch enabled, need to divide by batch size
+        loss = energy.sum()  
         return loss
 
     def compute_energy(self, A, B):

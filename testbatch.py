@@ -88,7 +88,6 @@ class Trainer(object):
 
         self.dataloaders = dict()
 
-    # with d net , if crashes, use another
     def _get_primal_model(self):
         
         return PrismDecoder(
@@ -238,17 +237,80 @@ class Trainer(object):
         num_iters = len(self.dataloaders[phase])
         loader_iter = iter(self.dataloaders[phase])
 
+
         self.feat_model.train()
         self.san_model.train()
         self.primo_model.train()
         self.nnsearcher.train()
         self.optimizer.zero_grad()
-        for iter_idx in tqdm(range(num_iters), miniters=int(num_iters / 100), desc=f'Epoch: {epoch} {phase}'):
-            global_step = (epoch - 1) * num_iters + (iter_idx + 1)
-            log_dict = {'global_step': global_step}
+        # for iter_idx in tqdm(range(num_iters), miniters=int(num_iters / 100), desc=f'Epoch: {epoch} {phase}'):
+        #     global_step = (epoch - 1) * num_iters + (iter_idx + 1)
+        #     log_dict = {'global_step': global_step}
 
-            batch_data = next(loader_iter)
-            batch_data = prepare_batch(batch_data, self.device)
+        #     batch_data = next(loader_iter)
+        #     batch_data = prepare_batch(batch_data, self.device)
+
+        #     print("batch_data:", batch_data)
+        #     # for key, value in batch_data.items():
+        #     #     if isinstance(value, torch.Tensor):
+        #     #         print(f"{key}: tensor of type {value.dtype} with shape {value.shape}")
+        #     #     else:
+        #     #         print(f"{key}: {type(value)} with value {value}")
+        #                 # 打印到控制台
+        #     print("batch_data:", batch_data)
+            
+        #     # 将信息写入CSV文件
+        #     if isinstance(batch_data, dict):
+        #         for key, value in batch_data.items():
+        #             if isinstance(value, torch.Tensor):
+        #                 details = f"tensor of type {value.dtype} with shape {value.shape} on device {value.device}"
+        #                 writer.writerow({'Variable Name': key, 'Type': 'Tensor', 'Details': details})
+        #             else:
+        #                 writer.writerow({'Variable Name': key, 'Type': type(value).__name__, 'Details': str(value)})
+        #     else:
+        #         writer.writerow({'Variable Name': 'batch_data', 'Type': type(batch_data).__name__, 'Details': str(batch_data)})
+        def prepare_batch(data, device):
+    # 假设 data 是一个字典，包含 tensor 或其他数据
+    # data_prepared = {key: value.to(device) if isinstance(value, torch.Tensor) else value
+    #                  for key, value in data.items()}
+    # return data_prepared
+
+# 打开 CSV 文件以追加模式写入
+            with open('record.csv', mode='a', newline='') as csvfile:
+                fieldnames = ['Variable Name', 'Type', 'Details']
+                writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+
+                # 写入表头（如果需要）
+                writer.writeheader()
+
+                for epoch in range(num_epochs):
+                    # 获取迭代器
+                    loader_iter = iter(data_loader)
+                    for iter_idx in tqdm(range(num_iters), miniters=int(num_iters / 100), desc=f'Epoch: {epoch} {phase}'):
+                        global_step = (epoch - 1) * num_iters + (iter_idx + 1)
+                        log_dict = {'global_step': global_step}
+
+                        # 获取下一个批次数据
+                        batch_data = next(loader_iter)
+                        
+                        # 处理批次数据并转移到指定设备
+                        batch_data = prepare_batch(batch_data, self.device)
+                        
+                        # 打印变量名和内容到控制台
+                        print("batch_data:", batch_data)
+
+                        # 将信息写入CSV文件
+                        if isinstance(batch_data, dict):
+                            for key, value in batch_data.items():
+                                if isinstance(value, torch.Tensor):
+                                    details = f"tensor of type {value.dtype} with shape {value.shape} on device {value.device}"
+                                    writer.writerow({'Variable Name': key, 'Type': 'Tensor', 'Details': details})
+                                else:
+                                    writer.writerow({'Variable Name': key, 'Type': type(value).__name__, 'Details': str(value)})
+                        else:
+                            writer.writerow({'Variable Name': 'batch_data', 'Type': type(batch_data).__name__, 'Details': str(batch_data)})
+
+            # 你可以在这里添加更多的训练代码，如前向传播、计算损失、反向传播和更新模型参数等
 
             evecs0_dzo = batch_data['evecs0'].float()
             evecs1_dzo = batch_data['evecs1'].float()
@@ -328,11 +390,6 @@ class Trainer(object):
 
             fmap01_final = torch.sum(attns01.view(attns01.shape[0], attns01.shape[1], 1, 1) * torch.stack(fmaps01_dzo, dim=1),
                                      dim=1)
-
-            # add promo block here
-
-
-
 
             loss_interim = 0
             for sidx, SD in enumerate(spectral_dims):
@@ -415,105 +472,111 @@ class Trainer(object):
 
             batch_data = next(loader_iter)
             batch_data = prepare_batch(batch_data, self.device)
-
-            evecs0_dzo = batch_data['evecs0'].float()
-            evecs1_dzo = batch_data['evecs1'].float()
-            if nsamples > 0:
-                sindices0 = farthest_point_sampling(batch_data['vertices0'].float(), nsamples, False)
-                sindices1 = farthest_point_sampling(batch_data['vertices1'].float(), nsamples, False)
-                evecs0_dzo = bslice(evecs0_dzo, sindices0)
-                evecs1_dzo = bslice(evecs1_dzo, sindices1)
-
-            with torch.no_grad():
-                all_feats = list()
-                for pidx in range(2):
-                    feats = self.feat_model(x_in=batch_data[f'{fmit}{pidx}'].float(),
-                                            mass=batch_data[f'mass{pidx}'].float(),
-                                            L=None,
-                                            evals=batch_data[f'evals{pidx}'].float(),
-                                            evecs=batch_data[f'evecs{pidx}'].float(),
-                                            gradX=batch_data[f'gradX{pidx}'],
-                                            gradY=batch_data[f'gradY{pidx}'])
-                    all_feats.append(feats)
-                feats0, feats1 = all_feats
-
-                fmaps01_init = list()
-                if cfg['loss.fmaps_fast_solve']:
-                    SD = spectral_dims[-1]
-                    fmap01 = self.fmap_solver(
-                        evecs0=batch_data['evecs0'][..., :SD].float(),
-                        evecs1=batch_data['evecs1'][..., :SD].float(),
-                        evals0=batch_data['evals0'][..., :SD].float(),
-                        evals1=batch_data['evals1'][..., :SD].float(),
-                        mass0=batch_data['mass0'].float(),
-                        mass1=batch_data['mass1'].float(),
-                        feats0=feats0,
-                        feats1=feats1,
-                        reg_weight=cfg['loss.fmap_reg'],
-                    )
-                    for sidx, SD in enumerate(spectral_dims):
-                        fmaps01_init.append(fmap01[..., :SD, :SD])
+            print("batch_data:", batch_data)
+            for key, value in batch_data.items():
+                if isinstance(value, torch.Tensor):
+                    print(f"{key}: tensor of type {value.dtype} with shape {value.shape}")
                 else:
-                    for sidx, SD in enumerate(spectral_dims):
-                        fmap01 = self.fmap_solver(
-                            evecs0=batch_data['evecs0'][..., :SD].float(),
-                            evecs1=batch_data['evecs1'][..., :SD].float(),
-                            evals0=batch_data['evals0'][..., :SD].float(),
-                            evals1=batch_data['evals1'][..., :SD].float(),
-                            mass0=batch_data['mass0'].float(),
-                            mass1=batch_data['mass1'].float(),
-                            feats0=feats0,
-                            feats1=feats1,
-                            reg_weight=cfg['loss.fmap_reg'],
-                        )
-                        fmaps01_init.append(fmap01)
+                    print(f"{key}: {type(value)} with value {value}")
 
-                attns01_logits = self.san_model(xyz0=batch_data['vertices0'].float(),
-                                                xyz1=batch_data['vertices1'].float(),
-                                                evecs0=batch_data['evecs0'].float(),
-                                                evecs1=batch_data['evecs1'].float(),
-                                                evals0=batch_data['evals0'].float(),
-                                                evals1=batch_data['evals1'].float(),
-                                                mass0=batch_data['mass0'].float(),
-                                                mass1=batch_data['mass1'].float(),
-                                                feats0=feats0,
-                                                feats1=feats1,
-                                                fmaps01=fmaps01_init)
-                attns01 = torch.softmax(attns01_logits, dim=1)
-                sidx_opt = torch.argmax(attns01, dim=1, keepdim=False)
-                assert sidx_opt.shape[0] == 1
-                sidx_opt = sidx_opt[0].item()
+            # evecs0_dzo = batch_data['evecs0'].float()
+            # evecs1_dzo = batch_data['evecs1'].float()
+            # if nsamples > 0:
+            #     sindices0 = farthest_point_sampling(batch_data['vertices0'].float(), nsamples, False)
+            #     sindices1 = farthest_point_sampling(batch_data['vertices1'].float(), nsamples, False)
+            #     evecs0_dzo = bslice(evecs0_dzo, sindices0)
+            #     evecs1_dzo = bslice(evecs1_dzo, sindices1)
 
-                fmaps01_dzo = list()
-                for sidx, SD in enumerate(spectral_dims):
-                    fmap01 = diff_zoomout(evecs0=evecs0_dzo,
-                                          evecs1=evecs1_dzo,
-                                          fmap01=fmaps01_init[sidx],
-                                          fmap_sizes=[SD, spectral_dims[-1]],
-                                          nnsearcher=self.nnsearcher,
-                                          return_all_fmaps=False)
-                    fmaps01_dzo.append(fmap01)
+            # with torch.no_grad():
+            #     all_feats = list()
+            #     for pidx in range(2):
+            #         feats = self.feat_model(x_in=batch_data[f'{fmit}{pidx}'].float(),
+            #                                 mass=batch_data[f'mass{pidx}'].float(),
+            #                                 L=None,
+            #                                 evals=batch_data[f'evals{pidx}'].float(),
+            #                                 evecs=batch_data[f'evecs{pidx}'].float(),
+            #                                 gradX=batch_data[f'gradX{pidx}'],
+            #                                 gradY=batch_data[f'gradY{pidx}'])
+            #         all_feats.append(feats)
+            #     feats0, feats1 = all_feats
 
-                fmap01_final = torch.sum(attns01.view(attns01.shape[0], attns01.shape[1], 1, 1) *
-                                         torch.stack(fmaps01_dzo, dim=1),
-                                         dim=1)
+            #     fmaps01_init = list()
+            #     if cfg['loss.fmaps_fast_solve']:
+            #         SD = spectral_dims[-1]
+            #         fmap01 = self.fmap_solver(
+            #             evecs0=batch_data['evecs0'][..., :SD].float(),
+            #             evecs1=batch_data['evecs1'][..., :SD].float(),
+            #             evals0=batch_data['evals0'][..., :SD].float(),
+            #             evals1=batch_data['evals1'][..., :SD].float(),
+            #             mass0=batch_data['mass0'].float(),
+            #             mass1=batch_data['mass1'].float(),
+            #             feats0=feats0,
+            #             feats1=feats1,
+            #             reg_weight=cfg['loss.fmap_reg'],
+            #         )
+            #         for sidx, SD in enumerate(spectral_dims):
+            #             fmaps01_init.append(fmap01[..., :SD, :SD])
+            #     else:
+            #         for sidx, SD in enumerate(spectral_dims):
+            #             fmap01 = self.fmap_solver(
+            #                 evecs0=batch_data['evecs0'][..., :SD].float(),
+            #                 evecs1=batch_data['evecs1'][..., :SD].float(),
+            #                 evals0=batch_data['evals0'][..., :SD].float(),
+            #                 evals1=batch_data['evals1'][..., :SD].float(),
+            #                 mass0=batch_data['mass0'].float(),
+            #                 mass1=batch_data['mass1'].float(),
+            #                 feats0=feats0,
+            #                 feats1=feats1,
+            #                 reg_weight=cfg['loss.fmap_reg'],
+            #             )
+            #             fmaps01_init.append(fmap01)
 
-            name0 = batch_data['name0'][0]
-            name1 = batch_data['name1'][0]
-            fmap01_ref = to_numpy(torch.squeeze(fmap01_final, 0))
-            evecs0 = to_numpy(torch.squeeze(batch_data['evecs0'], 0))
-            evecs1 = to_numpy(torch.squeeze(batch_data['evecs1'], 0))
+            #     attns01_logits = self.san_model(xyz0=batch_data['vertices0'].float(),
+            #                                     xyz1=batch_data['vertices1'].float(),
+            #                                     evecs0=batch_data['evecs0'].float(),
+            #                                     evecs1=batch_data['evecs1'].float(),
+            #                                     evals0=batch_data['evals0'].float(),
+            #                                     evals1=batch_data['evals1'].float(),
+            #                                     mass0=batch_data['mass0'].float(),
+            #                                     mass1=batch_data['mass1'].float(),
+            #                                     feats0=feats0,
+            #                                     feats1=feats1,
+            #                                     fmaps01=fmaps01_init)
+            #     attns01 = torch.softmax(attns01_logits, dim=1)
+            #     sidx_opt = torch.argmax(attns01, dim=1, keepdim=False)
+            #     assert sidx_opt.shape[0] == 1
+            #     sidx_opt = sidx_opt[0].item()
 
-            pmap10_ref = FM_to_p2p(fmap01_ref, evecs0, evecs1)
+            #     fmaps01_dzo = list()
+            #     for sidx, SD in enumerate(spectral_dims):
+            #         fmap01 = diff_zoomout(evecs0=evecs0_dzo,
+            #                               evecs1=evecs1_dzo,
+            #                               fmap01=fmaps01_init[sidx],
+            #                               fmap_sizes=[SD, spectral_dims[-1]],
+            #                               nnsearcher=self.nnsearcher,
+            #                               return_all_fmaps=False)
+            #         fmaps01_dzo.append(fmap01)
 
-            to_save = {
-                'id0': name0,
-                'id1': name1,
-                'pmap10_ref': pmap10_ref,
-            }
-            matpath = osp.join(out_root, f'{name0}-{name1}.mat')
-            may_create_folder(str(Path(matpath).parent))
-            savemat(matpath, to_save)
+            #     fmap01_final = torch.sum(attns01.view(attns01.shape[0], attns01.shape[1], 1, 1) *
+            #                              torch.stack(fmaps01_dzo, dim=1),
+            #                              dim=1)
+
+            # name0 = batch_data['name0'][0]
+            # name1 = batch_data['name1'][0]
+            # fmap01_ref = to_numpy(torch.squeeze(fmap01_final, 0))
+            # evecs0 = to_numpy(torch.squeeze(batch_data['evecs0'], 0))
+            # evecs1 = to_numpy(torch.squeeze(batch_data['evecs1'], 0))
+
+            # pmap10_ref = FM_to_p2p(fmap01_ref, evecs0, evecs1)
+
+            # to_save = {
+            #     'id0': name0,
+            #     'id1': name1,
+            #     'pmap10_ref': pmap10_ref,
+            # }
+            # matpath = osp.join(out_root, f'{name0}-{name1}.mat')
+            # may_create_folder(str(Path(matpath).parent))
+            # savemat(matpath, to_save)
 
     def train(self):
         cfg = self.cfg
